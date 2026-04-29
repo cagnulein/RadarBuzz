@@ -1,60 +1,55 @@
 using Toybox.AntPlus;
 using Toybox.Application;
 using Toybox.Attention;
+using Toybox.Graphics;
 using Toybox.Lang;
 using Toybox.System;
 using Toybox.WatchUi;
 
-class RadarBuzzView extends WatchUi.SimpleDataField {
+class RadarBuzzView extends WatchUi.DataField {
 
     hidden const DEFAULT_NEAR_THRESHOLD_METERS = 10.0;
     hidden const DEFAULT_MID_THRESHOLD_METERS = 25.0;
 
     hidden var mRadar;
-    hidden var mTargets;
     hidden var mRadarState;
-    hidden var mLastBuzzStamp;
-    hidden var mLastError;
+    hidden var mDisplayText;
+    hidden var mThreatCount;
+    hidden var mNearestRange;
+    hidden var mLastBuzzSecond;
     hidden var mTimerRunning;
 
     function initialize() {
-        SimpleDataField.initialize();
-        label = "RadarBuzz";
-
-        mTargets = [];
-        mRadarState = AntPlus.DEVICE_STATE_CLOSED;
-        mLastBuzzStamp = null;
-        mLastError = null;
-        mTimerRunning = false;
+        DataField.initialize();
 
         mRadar = new AntPlus.BikeRadar(null);
+        mRadarState = AntPlus.DEVICE_STATE_CLOSED;
+        mDisplayText = "PAIR";
+        mThreatCount = 0;
+        mNearestRange = null;
+        mLastBuzzSecond = null;
+        mTimerRunning = false;
     }
 
     function compute(info) {
-        try {
-            refreshRadarSnapshot();
+        refreshRadarState();
+        refreshDisplay(info);
+        maybeBuzz();
+    }
 
-            var nearest = getNearestTarget();
-            maybeBuzz(nearest);
+    function onUpdate(dc) {
+        var bgColor = getBackgroundColor();
+        var fgColor = bgColor == Graphics.COLOR_WHITE ? Graphics.COLOR_BLACK : Graphics.COLOR_WHITE;
 
-            if (mRadarState == AntPlus.DEVICE_STATE_DEAD || mRadarState == AntPlus.DEVICE_STATE_CLOSED) {
-                return "PAIR";
-            }
-
-            if (mRadarState == AntPlus.DEVICE_STATE_SEARCHING) {
-                return "SCAN";
-            }
-
-            if (nearest == null) {
-                return "CLEAR";
-            }
-
-            return nearest[:rangeText] + " " + getThreatCount().format("%d");
-        } catch (e) {
-            mLastError = e;
-            mTargets = [];
-            return "ERR";
-        }
+        dc.setColor(fgColor, bgColor);
+        dc.clear();
+        dc.drawText(
+            dc.getWidth() / 2,
+            dc.getHeight() / 2,
+            Graphics.FONT_SMALL,
+            mDisplayText,
+            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
+        );
     }
 
     function onTimerStart() {
@@ -67,92 +62,91 @@ class RadarBuzzView extends WatchUi.SimpleDataField {
 
     function onTimerPause() {
         mTimerRunning = false;
+        mLastBuzzSecond = null;
     }
 
     function onTimerStop() {
         mTimerRunning = false;
+        mLastBuzzSecond = null;
     }
 
     function onTimerReset() {
         mTimerRunning = false;
-        mLastBuzzStamp = null;
+        mLastBuzzSecond = null;
     }
 
-    hidden function refreshRadarSnapshot() {
-        if (mRadar == null) {
-            mTargets = [];
+    hidden function refreshRadarState() {
+        var deviceState = mRadar.getDeviceState();
+        if (deviceState == null || deviceState.state == null) {
             mRadarState = AntPlus.DEVICE_STATE_DEAD;
             return;
         }
 
-        var deviceState = mRadar.getDeviceState();
-        mRadarState = extractRadarState(deviceState);
+        mRadarState = deviceState.state;
+    }
 
-        var radarInfo = mRadar.getRadarInfo();
-        if (radarInfo == null || !(radarInfo instanceof Lang.Array)) {
-            mTargets = [];
+    hidden function refreshDisplay(info) {
+        mThreatCount = 0;
+        mNearestRange = null;
+
+        var radarInfo = mRadar.getRadarInfo() as Lang.Array<Toybox.AntPlus.RadarTarget>;
+        if (radarInfo != null) {
+            for (var i = 0; i < radarInfo.size(); i += 1) {
+                var target = radarInfo[i];
+                if (target == null || target.threat == 0) {
+                    continue;
+                }
+
+                mThreatCount += 1;
+                if (mNearestRange == null || target.range < mNearestRange) {
+                    mNearestRange = target.range;
+                }
+            }
+        }
+
+        if (mRadarState == AntPlus.DEVICE_STATE_DEAD || mRadarState == AntPlus.DEVICE_STATE_CLOSED) {
+            mDisplayText = "PAIR";
             return;
         }
 
-        mTargets = radarInfo;
+        if (mRadarState == AntPlus.DEVICE_STATE_SEARCHING) {
+            mDisplayText = "SCAN";
+            return;
+        }
+
+        if (mThreatCount == 0 || mNearestRange == null) {
+            mDisplayText = "CLEAR";
+            return;
+        }
+
+        mDisplayText = mNearestRange.format("%.0fm") + " " + mThreatCount.format("%d");
     }
 
-    hidden function getNearestTarget() {
-        if (mTargets == null || mTargets.size() == 0) {
-            return null;
-        }
-
-        var nearest = null;
-        for (var i = 0; i < mTargets.size(); i += 1) {
-            var target = mTargets[i];
-            if (target == null) {
-                continue;
-            }
-
-            if (!isThreatTarget(target)) {
-                continue;
-            }
-
-            if (!(target.range instanceof Lang.Float) && !(target.range instanceof Lang.Number)) {
-                continue;
-            }
-
-            if (nearest == null || target.range < nearest.range) {
-                nearest = target;
-            }
-        }
-
-        if (nearest == null) {
-            return null;
-        }
-
-        return {
-            :range => nearest.range,
-            :rangeText => nearest.range.format("%.0fm"),
-            :threat => nearest.threat
-        };
-    }
-
-    hidden function maybeBuzz(nearest) {
-        if (!mTimerRunning || nearest == null || !(Attention has :vibrate)) {
-            if (nearest == null) {
-                mLastBuzzStamp = null;
+    hidden function maybeBuzz() {
+        if (!mTimerRunning || mThreatCount <= 0 || mNearestRange == null || !(Attention has :vibrate)) {
+            if (mThreatCount <= 0) {
+                mLastBuzzSecond = null;
             }
             return;
         }
 
         var now = System.getClockTime();
-        var stamp = now.hour.format("%02d") + now.min.format("%02d") + now.sec.format("%02d");
-        if (mLastBuzzStamp == stamp) {
+        var secondStamp = now.hour.format("%02d") + now.min.format("%02d") + now.sec.format("%02d");
+        if (mLastBuzzSecond == secondStamp) {
             return;
         }
 
-        Attention.vibrate(buildPattern(nearest[:range]));
-        mLastBuzzStamp = stamp;
+        try {
+            Attention.vibrate(buildPattern(mNearestRange));
+            mLastBuzzSecond = secondStamp;
+        } catch (e) {
+            mLastBuzzSecond = secondStamp;
+        }
     }
 
     hidden function buildPattern(range) {
         var thresholds = getThresholds();
+
         if (range <= thresholds[:near]) {
             return [
                 new Attention.VibeProfile(100, 220),
@@ -201,40 +195,5 @@ class RadarBuzzView extends WatchUi.SimpleDataField {
         }
 
         return value.toFloat();
-    }
-
-    hidden function extractRadarState(data) {
-        if (data == null) {
-            return AntPlus.DEVICE_STATE_DEAD;
-        }
-
-        if (data instanceof AntPlus.DeviceState) {
-            return data.state;
-        }
-
-        return data;
-    }
-
-    hidden function getThreatCount() {
-        if (mTargets == null || !(mTargets instanceof Lang.Array)) {
-            return 0;
-        }
-
-        var count = 0;
-        for (var i = 0; i < mTargets.size(); i += 1) {
-            if (isThreatTarget(mTargets[i])) {
-                count += 1;
-            }
-        }
-
-        return count;
-    }
-
-    hidden function isThreatTarget(target) {
-        if (target == null || !(target instanceof AntPlus.RadarTarget)) {
-            return false;
-        }
-
-        return target.threat != null && target.threat != 0;
     }
 }
