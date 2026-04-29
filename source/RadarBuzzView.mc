@@ -47,9 +47,9 @@ class RadarBuzzView extends WatchUi.DataField {
 
         dc.setColor(fgColor, bgColor);
         dc.clear();
-        dc.drawText(dc.getWidth() / 2, 6, Graphics.FONT_XTINY, mDebugTextTop, Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_TOP);
+        dc.drawText(dc.getWidth() / 2, 6, Graphics.FONT_XTINY, mDebugTextTop, Graphics.TEXT_JUSTIFY_CENTER);
         dc.drawText(dc.getWidth() / 2, dc.getHeight() / 2, Graphics.FONT_SMALL, mDisplayText, Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
-        dc.drawText(dc.getWidth() / 2, dc.getHeight() - 6, Graphics.FONT_XTINY, mDebugTextBottom, Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_BOTTOM);
+        dc.drawText(dc.getWidth() / 2, dc.getHeight() - dc.getFontHeight(Graphics.FONT_XTINY) - 2, Graphics.FONT_XTINY, mDebugTextBottom, Graphics.TEXT_JUSTIFY_CENTER);
     }
 
     function onTimerStart() {
