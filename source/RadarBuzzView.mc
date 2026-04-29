@@ -14,8 +14,7 @@ class RadarBuzzView extends WatchUi.DataField {
     hidden var mRadar;
     hidden var mRadarState;
     hidden var mDisplayText;
-    hidden var mDebugTextTop;
-    hidden var mDebugTextBottom;
+    hidden var mDebugCompactText;
     hidden var mThreatCount;
     hidden var mNearestRange;
     hidden var mLastBuzzSecond;
@@ -27,8 +26,7 @@ class RadarBuzzView extends WatchUi.DataField {
         mRadar = new AntPlus.BikeRadar(null);
         mRadarState = AntPlus.DEVICE_STATE_CLOSED;
         mDisplayText = "PAIR";
-        mDebugTextTop = "S:-";
-        mDebugTextBottom = "R:- T:-";
+        mDebugCompactText = "S:- R:- T:-";
         mThreatCount = 0;
         mNearestRange = null;
         mLastBuzzSecond = null;
@@ -47,9 +45,7 @@ class RadarBuzzView extends WatchUi.DataField {
 
         dc.setColor(fgColor, bgColor);
         dc.clear();
-        dc.drawText(dc.getWidth() / 2, 6, Graphics.FONT_XTINY, mDebugTextTop, Graphics.TEXT_JUSTIFY_CENTER);
         dc.drawText(dc.getWidth() / 2, dc.getHeight() / 2, Graphics.FONT_SMALL, mDisplayText, Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
-        dc.drawText(dc.getWidth() / 2, dc.getHeight() - dc.getFontHeight(Graphics.FONT_XTINY) - 2, Graphics.FONT_XTINY, mDebugTextBottom, Graphics.TEXT_JUSTIFY_CENTER);
     }
 
     function onTimerStart() {
@@ -112,25 +108,24 @@ class RadarBuzzView extends WatchUi.DataField {
             }
         }
 
-        mDebugTextTop = "S:" + formatState(mRadarState) + " R:" + rawCount.format("%d");
-        mDebugTextBottom = "T:" + mThreatCount.format("%d") + " F:" + formatFirstTarget(firstRange, firstThreat);
+        mDebugCompactText = formatState(mRadarState) + " R" + rawCount.format("%d") + " T" + mThreatCount.format("%d") + " " + formatFirstTarget(firstRange, firstThreat);
 
         if (mRadarState == AntPlus.DEVICE_STATE_DEAD || mRadarState == AntPlus.DEVICE_STATE_CLOSED) {
-            mDisplayText = "PAIR";
+            mDisplayText = "PAIR " + mDebugCompactText;
             return;
         }
 
         if (mRadarState == AntPlus.DEVICE_STATE_SEARCHING) {
-            mDisplayText = "SCAN";
+            mDisplayText = "SCAN " + mDebugCompactText;
             return;
         }
 
         if (mThreatCount == 0 || mNearestRange == null) {
-            mDisplayText = "CLEAR";
+            mDisplayText = "CLEAR " + mDebugCompactText;
             return;
         }
 
-        mDisplayText = mNearestRange.format("%.0fm") + " " + mThreatCount.format("%d");
+        mDisplayText = mNearestRange.format("%.0fm") + " " + mThreatCount.format("%d") + " " + mDebugCompactText;
     }
 
     hidden function maybeBuzz() {
