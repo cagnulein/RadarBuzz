@@ -14,6 +14,8 @@ class RadarBuzzView extends WatchUi.DataField {
     hidden var mRadar;
     hidden var mRadarState;
     hidden var mDisplayText;
+    hidden var mDebugTextTop;
+    hidden var mDebugTextBottom;
     hidden var mThreatCount;
     hidden var mNearestRange;
     hidden var mLastBuzzSecond;
@@ -25,6 +27,8 @@ class RadarBuzzView extends WatchUi.DataField {
         mRadar = new AntPlus.BikeRadar(null);
         mRadarState = AntPlus.DEVICE_STATE_CLOSED;
         mDisplayText = "PAIR";
+        mDebugTextTop = "S:-";
+        mDebugTextBottom = "R:- T:-";
         mThreatCount = 0;
         mNearestRange = null;
         mLastBuzzSecond = null;
@@ -43,13 +47,9 @@ class RadarBuzzView extends WatchUi.DataField {
 
         dc.setColor(fgColor, bgColor);
         dc.clear();
-        dc.drawText(
-            dc.getWidth() / 2,
-            dc.getHeight() / 2,
-            Graphics.FONT_SMALL,
-            mDisplayText,
-            Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER
-        );
+        dc.drawText(dc.getWidth() / 2, 6, Graphics.FONT_XTINY, mDebugTextTop, Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_TOP);
+        dc.drawText(dc.getWidth() / 2, dc.getHeight() / 2, Graphics.FONT_SMALL, mDisplayText, Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+        dc.drawText(dc.getWidth() / 2, dc.getHeight() - 6, Graphics.FONT_XTINY, mDebugTextBottom, Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_BOTTOM);
     }
 
     function onTimerStart() {
@@ -90,9 +90,17 @@ class RadarBuzzView extends WatchUi.DataField {
         mNearestRange = null;
 
         var radarInfo = mRadar.getRadarInfo() as Lang.Array<Toybox.AntPlus.RadarTarget>;
+        var rawCount = 0;
+        var firstRange = null;
+        var firstThreat = null;
         if (radarInfo != null) {
+            rawCount = radarInfo.size();
             for (var i = 0; i < radarInfo.size(); i += 1) {
                 var target = radarInfo[i];
+                if (i == 0 && target != null) {
+                    firstRange = target.range;
+                    firstThreat = target.threat;
+                }
                 if (target == null || target.threat == 0) {
                     continue;
                 }
@@ -103,6 +111,9 @@ class RadarBuzzView extends WatchUi.DataField {
                 }
             }
         }
+
+        mDebugTextTop = "S:" + formatState(mRadarState) + " R:" + rawCount.format("%d");
+        mDebugTextBottom = "T:" + mThreatCount.format("%d") + " F:" + formatFirstTarget(firstRange, firstThreat);
 
         if (mRadarState == AntPlus.DEVICE_STATE_DEAD || mRadarState == AntPlus.DEVICE_STATE_CLOSED) {
             mDisplayText = "PAIR";
@@ -195,5 +206,35 @@ class RadarBuzzView extends WatchUi.DataField {
         }
 
         return value.toFloat();
+    }
+
+    hidden function formatState(state) {
+        if (state == AntPlus.DEVICE_STATE_DEAD) {
+            return "DEAD";
+        }
+        if (state == AntPlus.DEVICE_STATE_CLOSED) {
+            return "CLOSED";
+        }
+        if (state == AntPlus.DEVICE_STATE_SEARCHING) {
+            return "SEARCH";
+        }
+        if (state == AntPlus.DEVICE_STATE_TRACKING) {
+            return "TRACK";
+        }
+        if (state == null) {
+            return "NULL";
+        }
+
+        return state.format("%d");
+    }
+
+    hidden function formatFirstTarget(firstRange, firstThreat) {
+        if (firstRange == null && firstThreat == null) {
+            return "-";
+        }
+
+        var rangeText = firstRange == null ? "?" : firstRange.format("%.0f");
+        var threatText = firstThreat == null ? "?" : firstThreat.format("%d");
+        return rangeText + "/" + threatText;
     }
 }
