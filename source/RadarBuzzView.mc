@@ -1,4 +1,5 @@
 using Toybox.AntPlus;
+using Toybox.Activity;
 using Toybox.Application;
 using Toybox.Attention;
 using Toybox.Graphics;
@@ -18,6 +19,7 @@ class RadarBuzzView extends WatchUi.DataField {
     hidden var mThreatCount;
     hidden var mNearestRange;
     hidden var mLastBuzzSecond;
+    hidden var mLastVibeResult;
     hidden var mTimerRunning;
 
     function initialize() {
@@ -30,10 +32,12 @@ class RadarBuzzView extends WatchUi.DataField {
         mThreatCount = 0;
         mNearestRange = null;
         mLastBuzzSecond = null;
+        mLastVibeResult = "V-";
         mTimerRunning = false;
     }
 
     function compute(info) {
+        mTimerRunning = info != null && info.timerState == Activity.TIMER_STATE_ON;
         refreshRadarState();
         refreshDisplay(info);
         maybeBuzz();
@@ -86,17 +90,9 @@ class RadarBuzzView extends WatchUi.DataField {
         mNearestRange = null;
 
         var radarInfo = mRadar.getRadarInfo() as Lang.Array<Toybox.AntPlus.RadarTarget>;
-        var rawCount = 0;
-        var firstRange = null;
-        var firstThreat = null;
         if (radarInfo != null) {
-            rawCount = radarInfo.size();
             for (var i = 0; i < radarInfo.size(); i += 1) {
                 var target = radarInfo[i];
-                if (i == 0 && target != null) {
-                    firstRange = target.range;
-                    firstThreat = target.threat;
-                }
                 if (target == null || target.threat == 0) {
                     continue;
                 }
@@ -108,7 +104,7 @@ class RadarBuzzView extends WatchUi.DataField {
             }
         }
 
-        mDebugCompactText = formatState(mRadarState) + " R" + rawCount.format("%d") + " T" + mThreatCount.format("%d") + " " + formatFirstTarget(firstRange, firstThreat);
+        mDebugCompactText = "A" + (mTimerRunning ? "1" : "0") + " " + mLastVibeResult;
 
         if (mRadarState == AntPlus.DEVICE_STATE_DEAD || mRadarState == AntPlus.DEVICE_STATE_CLOSED) {
             mDisplayText = "PAIR " + mDebugCompactText;
@@ -133,6 +129,11 @@ class RadarBuzzView extends WatchUi.DataField {
             if (mThreatCount <= 0) {
                 mLastBuzzSecond = null;
             }
+            if (!(Attention has :vibrate)) {
+                mLastVibeResult = "VNA";
+            } else if (!mTimerRunning) {
+                mLastVibeResult = "VPA";
+            }
             return;
         }
 
@@ -145,8 +146,10 @@ class RadarBuzzView extends WatchUi.DataField {
         try {
             Attention.vibrate(buildPattern(mNearestRange));
             mLastBuzzSecond = secondStamp;
+            mLastVibeResult = "VOK";
         } catch (e) {
             mLastBuzzSecond = secondStamp;
+            mLastVibeResult = "VER";
         }
     }
 
@@ -203,33 +206,4 @@ class RadarBuzzView extends WatchUi.DataField {
         return value.toFloat();
     }
 
-    hidden function formatState(state) {
-        if (state == AntPlus.DEVICE_STATE_DEAD) {
-            return "DEAD";
-        }
-        if (state == AntPlus.DEVICE_STATE_CLOSED) {
-            return "CLOSED";
-        }
-        if (state == AntPlus.DEVICE_STATE_SEARCHING) {
-            return "SEARCH";
-        }
-        if (state == AntPlus.DEVICE_STATE_TRACKING) {
-            return "TRACK";
-        }
-        if (state == null) {
-            return "NULL";
-        }
-
-        return state.format("%d");
-    }
-
-    hidden function formatFirstTarget(firstRange, firstThreat) {
-        if (firstRange == null && firstThreat == null) {
-            return "-";
-        }
-
-        var rangeText = firstRange == null ? "?" : firstRange.format("%.0f");
-        var threatText = firstThreat == null ? "?" : firstThreat.format("%d");
-        return rangeText + "/" + threatText;
-    }
 }
