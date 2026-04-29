@@ -5,31 +5,12 @@ using Toybox.Lang;
 using Toybox.System;
 using Toybox.WatchUi;
 
-class RadarBuzzListener extends AntPlus.BikeRadarListener {
-
-    hidden var mView;
-
-    function initialize(view) {
-        BikeRadarListener.initialize();
-        mView = view;
-    }
-
-    function onBikeRadarUpdate(data) {
-        mView.onRadarUpdate(data);
-    }
-
-    function onDeviceStateUpdate(data) {
-        mView.onRadarStateUpdate(data);
-    }
-}
-
 class RadarBuzzView extends WatchUi.SimpleDataField {
 
     hidden const DEFAULT_NEAR_THRESHOLD_METERS = 10.0;
     hidden const DEFAULT_MID_THRESHOLD_METERS = 25.0;
 
     hidden var mRadar;
-    hidden var mListener;
     hidden var mTargets;
     hidden var mRadarState;
     hidden var mLastBuzzStamp;
@@ -44,15 +25,16 @@ class RadarBuzzView extends WatchUi.SimpleDataField {
         mLastBuzzStamp = null;
         mTimerRunning = false;
 
-        mListener = new RadarBuzzListener(self);
-        mRadar = new AntPlus.BikeRadar(mListener);
+        mRadar = new AntPlus.BikeRadar(null);
     }
 
     function compute(info) {
+        refreshRadarSnapshot();
+
         var nearest = getNearestTarget();
         maybeBuzz(nearest);
 
-        if (mRadarState == AntPlus.DEVICE_STATE_DEAD) {
+        if (mRadarState == AntPlus.DEVICE_STATE_DEAD || mRadarState == AntPlus.DEVICE_STATE_CLOSED) {
             return "PAIR";
         }
 
@@ -88,14 +70,18 @@ class RadarBuzzView extends WatchUi.SimpleDataField {
         mLastBuzzStamp = null;
     }
 
-    function onRadarUpdate(data) {
-        mTargets = data == null ? [] : data;
-        WatchUi.requestUpdate();
-    }
+    hidden function refreshRadarSnapshot() {
+        if (mRadar == null) {
+            mTargets = [];
+            mRadarState = AntPlus.DEVICE_STATE_DEAD;
+            return;
+        }
 
-    function onRadarStateUpdate(data) {
-        mRadarState = data;
-        WatchUi.requestUpdate();
+        var deviceState = mRadar.getDeviceState();
+        mRadarState = extractRadarState(deviceState);
+
+        var radarInfo = mRadar.getRadarInfo();
+        mTargets = radarInfo == null ? [] : radarInfo;
     }
 
     hidden function getNearestTarget() {
@@ -107,6 +93,10 @@ class RadarBuzzView extends WatchUi.SimpleDataField {
         for (var i = 0; i < mTargets.size(); i += 1) {
             var target = mTargets[i];
             if (target == null) {
+                continue;
+            }
+
+            if (target.threat == null || target.threat == 0) {
                 continue;
             }
 
@@ -194,5 +184,17 @@ class RadarBuzzView extends WatchUi.SimpleDataField {
         }
 
         return value.toFloat();
+    }
+
+    hidden function extractRadarState(data) {
+        if (data == null) {
+            return AntPlus.DEVICE_STATE_DEAD;
+        }
+
+        if (data instanceof AntPlus.DeviceState) {
+            return data.state;
+        }
+
+        return data;
     }
 }
