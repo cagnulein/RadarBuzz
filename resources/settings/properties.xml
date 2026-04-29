@@ -1,0 +1,4 @@
+<properties>
+    <property id="nearThresholdMeters" type="number">10</property>
+    <property id="midThresholdMeters" type="number">25</property>
+</properties>

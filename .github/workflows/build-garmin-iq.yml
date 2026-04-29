@@ -1,0 +1,87 @@
+name: Build Garmin IQ
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      CIQ_SDK_VERSION: "9.1.0"
+      GARMIN_USERNAME: ${{ secrets.GARMIN_USERNAME }}
+      GARMIN_PASSWORD: ${{ secrets.GARMIN_PASSWORD }}
+      CIQ_AGREEMENT_HASH: ${{ secrets.CIQ_AGREEMENT_HASH }}
+      CIQ_DEVELOPER_KEY_DER_BASE64: ${{ secrets.CIQ_DEVELOPER_KEY_DER_BASE64 }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Cache Connect IQ Downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.connect-iq-sdk-manager
+          key: ${{ runner.os }}-ciq-${{ env.CIQ_SDK_VERSION }}-${{ hashFiles('manifest.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-ciq-${{ env.CIQ_SDK_VERSION }}-
+
+      - name: Install Connect IQ SDK Manager CLI
+        run: go install github.com/lindell/connect-iq-sdk-manager-cli@latest
+
+      - name: Add Go Bin to PATH
+        run: echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+      - name: Validate Required Secrets
+        run: |
+          test -n "$GARMIN_USERNAME"
+          test -n "$GARMIN_PASSWORD"
+          test -n "$CIQ_AGREEMENT_HASH"
+          test -n "$CIQ_DEVELOPER_KEY_DER_BASE64"
+
+      - name: Accept Garmin Agreement
+        run: connect-iq-sdk-manager agreement accept --acceptance-hash="$CIQ_AGREEMENT_HASH"
+
+      - name: Login to Garmin
+        run: connect-iq-sdk-manager login --username="$GARMIN_USERNAME" --password="$GARMIN_PASSWORD"
+
+      - name: Install SDK
+        run: connect-iq-sdk-manager sdk set "$CIQ_SDK_VERSION"
+
+      - name: Install Device Library From Manifest
+        run: connect-iq-sdk-manager device download --manifest=manifest.xml
+
+      - name: Add SDK Bin to PATH
+        run: echo "$(connect-iq-sdk-manager sdk current-path --bin)" >> "$GITHUB_PATH"
+
+      - name: Restore Developer Key
+        run: |
+          mkdir -p .ciq
+          printf '%s' "$CIQ_DEVELOPER_KEY_DER_BASE64" | base64 -d > .ciq/developer_key.der
+
+      - name: Build IQ Package
+        run: |
+          mkdir -p dist
+          monkeyc \
+            -f monkey.jungle \
+            -w \
+            -r \
+            -e \
+            -y .ciq/developer_key.der \
+            -o dist/RadarBuzz.iq
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: RadarBuzz-iq-package
+          path: dist/RadarBuzz.iq

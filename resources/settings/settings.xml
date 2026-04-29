@@ -1,0 +1,8 @@
+<settings>
+    <setting propertyKey="@Properties.nearThresholdMeters" title="@Strings.NearThresholdTitle">
+        <settingConfig type="numeric" min="1"/>
+    </setting>
+    <setting propertyKey="@Properties.midThresholdMeters" title="@Strings.MidThresholdTitle">
+        <settingConfig type="numeric" min="2"/>
+    </setting>
+</settings>

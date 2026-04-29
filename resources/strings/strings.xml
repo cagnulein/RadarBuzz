@@ -1,0 +1,5 @@
+<strings>
+    <string id="AppName">RadarBuzz</string>
+    <string id="NearThresholdTitle">Soglia vicina (m)</string>
+    <string id="MidThresholdTitle">Soglia media (m)</string>
+</strings>
