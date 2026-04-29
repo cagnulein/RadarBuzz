@@ -104,7 +104,8 @@ class RadarBuzzView extends WatchUi.SimpleDataField {
         }
 
         var nearest = null;
-        for (var target in mTargets) {
+        for (var i = 0; i < mTargets.size(); i += 1) {
+            var target = mTargets[i];
             if (target == null) {
                 continue;
             }
